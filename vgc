@@ -1,0 +1,59 @@
+#!/bin/bash
+# http://qiita.com/mt08/items/9f357be12c126d8976b3
+
+OPT_DAEMON=  # --daemon
+OPT_UPDATE=non_update
+
+VPNGATE_CONF=/etc/openvpn/vpngate.conf
+USER_VPNGATE=/etc/openvpn/user_vpngate.txt
+VPNGATE_CSV=~/.vpngate.csv
+CMD=$1
+CMD=${CMD,,} #lowercase
+
+if [ ! -z $CMD ] ; then
+    if [ $CMD == "update" ] ; then OPT_UPDATE=update ; fi
+    if [ $CMD == "clean" ] ; then sudo rm $USER_VPNGATE $VPNGATE_CSV $VPNGATE_CONF; echo cleaned ; exit ; fi
+fi
+
+
+function create_userpassfile() {
+    echo -e "vpn\nvpn" | sudo tee $USER_VPNGATE
+    sudo chmod 700 $USER_VPNGATE
+}
+
+function download_vpngate_csv() {
+    wget http://www.vpngate.net/api/iphone/ -O - | tail -n +3 > $VPNGATE_CSV
+    return 0
+}
+
+
+#
+if [ -e $USER_VPNGATE ]; then
+    echo found $USER_VPNGATE
+else
+    create_userpassfile
+fi
+
+#
+if [ ! -e $VPNGATE_CSV ] || [ $OPT_UPDATE == "update" ] ; then
+    download_vpngate_csv
+else
+    echo found: $VPNGATE_CSV
+fi
+
+
+# Show Server List
+cat $VPNGATE_CSV | cut -d ',' -f 1-10 | column -s, -t  | less -#2 -N -S
+
+# Select Server
+echo -n "Enter #"
+read
+sudo rm -f $VPNGATE_CONF
+cat $VPNGATE_CSV | sed -n ${REPLY}P | cut -d ',' -f 15 | base64 -d | sed -e "s/#auth-user-pass/auth-user-pass\ \/${USER_VPNGATE//\//\\\/}/g" | sudo tee $VPNGATE_CONF > /dev/null
+
+# openvpn is running ???
+pidof openvpn > /dev/null ; if [ $? -eq 0 ]; then sudo killall openvpn ; sleep 5; fi
+
+# Connect
+sudo openvpn ${OPT_DAEMON} $VPNGATE_CONF
+
