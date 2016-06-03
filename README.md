@@ -1,0 +1,2 @@
+# vgc
+VPNGate Connection script
